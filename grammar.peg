@@ -1,0 +1,106 @@
+{
+  package main
+
+  func toIfaceSlice(v interface{}) []interface{} {
+    if v == nil {
+      return nil
+    }
+    return v.([]interface{})
+  }
+
+  func ifaceToString(i interface{}) string {
+    var str string
+    f := toIfaceSlice(i)
+  
+    if f != nil {
+      for _, v := range f {
+        char := v.([]byte)
+        str += string(char[:])
+      }
+    }
+
+    return str
+  }
+}
+
+start = _ b:Content EOF {
+  return b, nil
+}
+
+Comment = v:(
+  "#" v:(![\r\n] ch:. { return ch, nil })* NL { return v, nil } /
+  "//" v:(![\r\n] ch:. { return ch, nil })* NL { return v, nil } /
+  "/*" v:(!"*/" ch:. { return ch, nil })* "*/" NL { return v, nil }
+) {
+  return &comment{strings.TrimSpace(ifaceToString(v))}, nil
+}
+
+Content = (Comment / Verb)*
+
+Verb = name:identity SP args:(Arg)* body:Body? NL {
+  n := name.(string)
+  a := toIfaceSlice(args)
+  b := toIfaceSlice(body)
+  
+  return &verb{n, a, b}, nil
+}
+
+Arg = k:(
+  null /
+  boolean /
+  number /
+  str /
+  Method /
+  Path 
+) SP { return k, nil }
+
+Method = f:identity "(" SP args:(Arg)* ")" {
+  return &variable{f.(string), nil, args.([]interface{})}, nil
+}
+
+Path = f:identity r:(CompoundPath)* {
+  return &variable{f.(string), toIfaceSlice(r), nil}, nil
+}
+
+CompoundPath
+  = "." i:identity { return i, nil }
+  / "[" p:(unsigned / str / Path) "]" { return p, nil }
+
+Body = "{" _ b:Content "}" {
+  return b, nil
+}
+
+identity = f:[a-z_$]i r:[a-z0-9_$]i* {
+  str := string(f.([]byte)[:]) + ifaceToString(r)
+  return str, nil
+}
+
+boolean
+	= "true" { return true, nil; }
+	/ "false" { return false, nil; }
+
+number = "-"? [0-9]+ ("." [0-9]+)? {
+  return strconv.ParseFloat(string(c.text[:]), 64);
+}
+
+unsigned = [0-9]+ {
+  return strconv.ParseUint(string(c.text[:]), 10, 64);
+}
+
+str = v:(
+	"\"" v:(escape / [^"])* "\"" { return v, nil; } /
+	"'" v:(escape / [^'])* "'" { return v, nil; }
+) {
+  return ifaceToString(v), nil
+}
+
+escape = "\\" char:. { return char, nil; }
+
+null = "null" / "nil" { return nil, nil; }
+
+_ "whitespace" = [ \t\r\n]*
+SP = [ \t]*
+GS = [ \t]+
+NL = SP [\r\n]* _
+
+EOF = !.
