@@ -7,7 +7,7 @@ function hash_password(pass salt) {
 # randomly generate the salt when the user changes passwords
 computed salt {
   ok draft.password
-  return random_string(32)
+  return random_blob(32)
 }
 
 # generate the password hash from the password and salt
@@ -18,28 +18,35 @@ computed derived_key {
 
 # the user model: the definition of a user
 model user {
-  # this config makes the model only ever return a single document
-  singular_mode true
+  # config
+  single true # makes the model only ever return a single document
   
-  # expected content in a document on this model
+  # expected content in a document of this model
   schema {
-    id primary_key immutable computed("random_uuid")
-    username string unique index
-    password string minlen(8) virtual
-    password_salt string len(32) hidden computed("password_salt")
-    password_hash string len(32) hidden computed("password_hash")
+    id           uuid   primary_key uuid_random immutable
+    username     string unique index merge
+    password     string minlen(8) virtual optional
+    salt         blob   len(32) hidden computed(salt)
+    derived_key  blob   len(32) hidden computed(derived_key)
+    created_at   date   date_now immutable
+    last_updated date   date_now
   }
   
   # access control allowing reads/writes to user's own document
   allow {
     equal doc.id userctx.id
   }
+  
+  # deny creates that are missing a password
+  deny create {
+    notok draft.password "Missing password"
+  }
 }
 
 # api authentication using basic auth and the user model
 authenticate {
   var auth parse_basic_auth(headers.authorization)
-  var user fetch_by_index("user" "username" auth.user)
+  var user fetch("user" "username" auth.user)
   equal user.password_hash hash_password(auth.pass user.password_salt)
   return user
 }

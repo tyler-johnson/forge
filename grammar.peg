@@ -31,17 +31,31 @@ Comment = v:(
   "#" v:(![\r\n] ch:. { return ch, nil })* NL { return v, nil } /
   "//" v:(![\r\n] ch:. { return ch, nil })* NL { return v, nil } /
   "/*" v:(!"*/" ch:. { return ch, nil })* "*/" NL { return v, nil }
-) {
-  return &comment{strings.TrimSpace(ifaceToString(v))}, nil
-}
+)
 
-Content = (Comment / Verb)*
+Content = b:(Comment / Verb)* {
+  verbs := make([]*verb, 0)
+
+  if b != nil {
+    for _, v := range toIfaceSlice(b) {
+      if verb, ok := v.(*verb); ok {
+        verbs = append(verbs, verb)
+      }
+    }
+  }
+
+  return verbs, nil
+}
 
 Verb = name:identity SP args:(Arg)* body:Body? NL {
   n := name.(string)
   a := toIfaceSlice(args)
-  b := toIfaceSlice(body)
-  
+
+  var b []*verb
+  if body != nil {
+    b = body.([]*verb)
+  }
+
   return &verb{n, a, b}, nil
 }
 
@@ -50,21 +64,20 @@ Arg = k:(
   boolean /
   number /
   str /
-  Method /
-  Path 
+  Variable 
 ) SP { return k, nil }
 
-Method = f:identity "(" SP args:(Arg)* ")" {
-  return &variable{f.(string), nil, args.([]interface{})}, nil
+Variable = f:identity r:(CompoundPath)* a:MethodArgs? {
+  return &variable{f.(string), toIfaceSlice(r), toIfaceSlice(a)}, nil
 }
 
-Path = f:identity r:(CompoundPath)* {
-  return &variable{f.(string), toIfaceSlice(r), nil}, nil
+MethodArgs = "(" SP args:(Arg)* ")" {
+  return args, nil
 }
 
 CompoundPath
   = "." i:identity { return i, nil }
-  / "[" p:(unsigned / str / Path) "]" { return p, nil }
+  / "[" p:(unsigned / str / Variable) "]" { return p, nil }
 
 Body = "{" _ b:Content "}" {
   return b, nil
