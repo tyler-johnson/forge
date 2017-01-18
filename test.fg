@@ -1,21 +1,3 @@
-# a function to be used elsewhere that hashes passwords
-# takes two arguments, the password and the salt
-function hash_password(pass salt) {
-  return pbkdf2(pass salt 10000 32 sha256)
-}
-
-# randomly generate the salt when the user changes passwords
-computed salt {
-  ok draft.password
-  return random_blob(32)
-}
-
-# generate the password hash from the password and salt
-computed derived_key {
-  ok draft.password
-  return hash_password(draft.password draft.password_salt)
-}
-
 # the user model: the definition of a user
 model user {
   # config
@@ -23,30 +5,79 @@ model user {
   
   # expected content in a document of this model
   schema {
-    id           uuid   primary_key uuid_random immutable
-    username     string unique index merge
-    password     string minlen(8) virtual optional
-    salt         blob   len(32) hidden computed(salt)
-    derived_key  blob   len(32) hidden computed(derived_key)
-    created_at   date   date_now immutable
-    last_updated date   date_now
+    id            uuid     computed(uuid_v4) primary_key immutable
+    created       date     computed(current_date) immutable
+    last_updated  date     computed(current_date)
+    username      string   unique merge
+    email         string   validate(email) merge
+    password      password computed(pbkdf2) minlen(8) hidden
+    admin         bool     default(false) merge
   }
-  
-  # access control allowing reads/writes to user's own document
+
+  # allow reads to user's own document
+  publish singleUser {
+    permission everyone
+    query {
+      id $userctx.id
+    }
+  }
+
+  # admins get access to everyone
+  publish allUsers {
+    permission admin
+    query {}
+  }
+
+  # everyone can create users
   allow {
-    equal doc.id userctx.id
+    policy create
+    permission everyone
   }
-  
-  # deny creates that are missing a password
-  deny create {
-    notok draft.password "Missing password"
+
+  # admins can update/delete all users
+  allow {
+    policy update delete
+    permission admin
+  }
+
+  # everyone can update/delete their own doc
+  allow {
+    policy update delete
+    permission everyone
+    assert {
+      equal $userctx.id $doc.id
+    }
+  }
+
+  # prevent creates missing some fields
+  deny {
+    policy create
+    permission everyone
+    assert {
+      notok $draft.username
+      notok $draft.password
+      notok $draft.email
+    }
   }
 }
 
-# api authentication using basic auth and the user model
-authenticate {
-  var auth parse_basic_auth(headers.authorization)
-  var user fetch("user" "username" auth.user)
-  equal user.password_hash hash_password(auth.pass user.password_salt)
-  return user
+# config for basic authentication
+authentication basic {
+  model user
+  query {
+    username $basic_auth.username
+    password {
+      @password_hash $basic_auth.password
+    }
+  }
+}
+
+# all users match the everyone permission
+permission everyone {}
+
+# only admins get admin permissions
+permission admin {
+  assert {
+    ok $userctx.admin
+  }
 }
