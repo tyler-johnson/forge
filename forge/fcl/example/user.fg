@@ -54,17 +54,17 @@ model user {
 
   # prevent users from changing admin field
   deny {
-    policy all
+    policy create update
     permission !admin
-    where admin @neq false
+    where admin true
   }
 }
 
 # config for basic authentication
 authentication basic {
   model user
-  where {
-    username $basicAuth.username
-    password @passwordHash $basicAuth.password
+  where username $basicAuth.username
+  assert {
+    equal $doc.password passwordHash($basicAuth.password $doc.password)
   }
 }

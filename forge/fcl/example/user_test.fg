@@ -1,0 +1,17 @@
+
+
+describe {
+  test "password required on create" {
+    create user {
+      username "testuser"
+      email "test@test.com"
+
+      @assert {
+        equal $res.statusCode 400
+        contains $res.body.message "missing password"
+      }
+    }
+  }
+
+
+}
