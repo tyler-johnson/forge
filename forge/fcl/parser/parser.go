@@ -10,7 +10,8 @@ import (
 )
 
 type Parser struct {
-	sc *scanner.Scanner
+	Source []byte
+	sc     *scanner.Scanner
 
 	tok  token.Token
 	n    int // max = 1
@@ -19,14 +20,16 @@ type Parser struct {
 
 func New(src []byte) *Parser {
 	return &Parser{
-		sc: scanner.New(src),
+		Source: src,
 	}
 }
 
 func (p *Parser) Parse() (*ast.File, error) {
+	p.Reset()
 	f := &ast.File{}
+	startpos := p.peek()
 
-	n, err := p.verbBody(true)
+	n, err := p.verbBody()
 	if err != nil {
 		return nil, err
 	}
@@ -36,8 +39,16 @@ func (p *Parser) Parse() (*ast.File, error) {
 		return nil, errors.New(fmt.Sprintf("Unexpected Token %s", tok))
 	}
 
-	f.Node = n
+	n.StartPos = startpos.Pos
+	n.EndPos = tok.Pos
+	f.Root = n
 	return f, nil
+}
+
+func (p *Parser) Reset() {
+	p.sc = scanner.New(p.Source)
+	p.n = 0
+	p.line = 0
 }
 
 func (p *Parser) scan() token.Token {
@@ -60,28 +71,23 @@ func (p *Parser) peek() token.Token {
 	return tok
 }
 
-func (p *Parser) verbBody(file bool) (*ast.VerbBody, error) {
+func (p *Parser) verbBody() (*ast.VerbBody, error) {
 	b := &ast.VerbBody{}
 
-	if !file {
-		if n := p.comment(); n != nil {
-			b.Add(n)
-		}
+	if n := p.comment(); n != nil {
+		b.Add(n)
 	}
 
 	for {
 		tok := p.peek()
-		if file && tok.Type == token.EOF {
-			break
-		} else if !file && tok.Type == token.RBRACE {
-			p.scan()
-			break
-		}
-
 		prevline := p.line
 		p.line = tok.Pos.Line
 		if p.line <= prevline {
-			return nil, errors.New(fmt.Sprintf("Unexpected Token %s", tok))
+			if len(b.Items) > 0 {
+				return nil, errors.New(fmt.Sprintf("Unexpected Token %s", tok))
+			} else {
+				break
+			}
 		}
 
 		addedNode := false
@@ -122,17 +128,19 @@ func (p *Parser) comment() *ast.Comment {
 
 func (p *Parser) verb() (*ast.Verb, error) {
 	// generate key
-	pos := p.peek().Pos
-	id := ast.NewIdentifier(pos)
+	id := &ast.Identifier{
+		RawPos: p.peek().Pos,
+	}
 
 	// get modifiers
-	id.Modifiers = p.modifiers()
+	mods := p.modifiers()
+	id.SetModifier(mods...)
 
 	// look for standard identifier
 	tok := p.scan()
 	if tok.Type != token.IDENT || tok.Pos.Line != p.line {
 		// we expect immediate identifier if there are modifiers
-		if len(id.Modifiers) > 0 {
+		if len(mods) > 0 {
 			return nil, errors.New(fmt.Sprintf("Unexpected Token %s", tok))
 		} else {
 			p.unscan()
@@ -155,11 +163,18 @@ func (p *Parser) verb() (*ast.Verb, error) {
 	// parse for body
 	tok = p.scan()
 	if tok.Type == token.LBRACE && tok.Pos.Line == p.line {
-		b, err := p.verbBody(false)
+		b, err := p.verbBody()
 		if err != nil {
 			return nil, err
 		}
 
+		b.StartPos = tok.Pos
+		tok = p.scan()
+		if tok.Type != token.RBRACE || tok.Pos.Line != p.line {
+			return nil, errors.New(fmt.Sprintf("Unexpected Token %s", tok))
+		}
+
+		b.EndPos = tok.Pos
 		verb.Body = b
 	} else {
 		p.unscan()
@@ -168,7 +183,9 @@ func (p *Parser) verb() (*ast.Verb, error) {
 	return verb, nil
 }
 
-func (p *Parser) modifiers() (mods []string) {
+func (p *Parser) modifiers() []string {
+	mods := make([]string, 0)
+
 	for {
 		tok := p.scan()
 		if (tok.Type == token.AT || tok.Type == token.BANG) && tok.Pos.Line == p.line {
@@ -179,7 +196,7 @@ func (p *Parser) modifiers() (mods []string) {
 		}
 	}
 
-	return
+	return mods
 }
 
 func (p *Parser) valueGroup() (*ast.ValueGroup, error) {
@@ -208,9 +225,10 @@ func (p *Parser) value() (ast.Node, error) {
 	}
 
 	// generate key and get modifiers
-	pos := p.peek().Pos
-	id := ast.NewIdentifier(pos)
-	id.Modifiers = p.modifiers()
+	id := &ast.Identifier{
+		RawPos:    p.peek().Pos,
+		Modifiers: p.modifiers(),
+	}
 
 	// test for $ which means variable
 	tok := p.scan()
@@ -280,7 +298,9 @@ func (p *Parser) literal() *ast.Literal {
 		return nil
 	}
 
-	l := ast.NewLiteral(tok.Pos)
+	l := &ast.Literal{
+		RawPos: tok.Pos,
+	}
 
 	switch tok.Type {
 	case token.STRING, token.HEREDOC:
@@ -327,20 +347,22 @@ loop:
 				return nil, errors.New(fmt.Sprintf("Unexpected Token %s", p.peek()))
 			}
 
-			part := ast.NewPathPart(value.Pos())
-			part.Type = ast.COMPOUND
-			part.Value = value
-			path.Add(part)
+			path.Add(&ast.PathPart{
+				RawPos: value.Pos(),
+				Type:   ast.COMPOUND,
+				Value:  value,
+			})
 		case token.PERIOD:
 			tok := p.scan()
 			if tok.Type != token.IDENT && tok.Pos.Line == p.line {
 				return nil, errors.New(fmt.Sprintf("Unexpected Token %s", tok))
 			}
 
-			part := ast.NewPathPart(tok.Pos)
-			part.Type = ast.SIMPLE
-			part.Value = tok.Text
-			path.Add(part)
+			path.Add(&ast.PathPart{
+				RawPos: tok.Pos,
+				Type:   ast.SIMPLE,
+				Value:  tok.Text,
+			})
 		default:
 			p.unscan()
 			break loop

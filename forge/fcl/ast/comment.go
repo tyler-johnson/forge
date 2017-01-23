@@ -11,6 +11,10 @@ func NewComment(pos token.Pos) *Comment {
 	return &Comment{pos: pos}
 }
 
+func (f *Comment) NodeName() string {
+	return "Comment"
+}
+
 func (c *Comment) Pos() token.Pos {
 	return c.pos
 }
