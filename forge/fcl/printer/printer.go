@@ -2,7 +2,6 @@ package printer
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"runtime"
 	"strings"
@@ -96,215 +95,67 @@ func (p *Printer) space() int {
 	return p.write(" ")
 }
 
-// func columnSizes(nodes []ast.Node, ct int) []int {
-// 	sizes := make([]int, ct + 2)
-
-// 	for _, item := range nodes {
-// 		switch node := item.(type) {
-// 		case *ast.Verb:
-// 			n := len(node.Key.Modifiers) + len(node.Key.Value)
-// 			if n > sizes[0] {
-// 				sizes[0] = n
-// 			}
-
-//       if !node.Values.IsEmpty() {
-//         for i := 0; i < ct; i++ {
-//           if len(node.Values) > i {
-//             sizes[i + 1] = len(node.Values[i].)
-//           }
-//         }
-//       }
-// 		}
-// 	}
-
-// 	return sizes
-// }
-
-type verbGroupColumns struct {
-	items   []ast.Node
-	values  int
-	braces  bool
-	comment bool
-}
-
-func parseColumns(nodes []ast.Node, valueCount int) (out []*verbGroupColumns) {
-	type lineitem struct {
-		items   []ast.Node
-		values  int
-		comment bool
-		braces  bool
-	}
-
-	type group struct {
-		lineitems []*lineitem
-	}
-
-	var prevline int
-	var line *lineitem
-	groups := make([]*group, 0)
-
-	lastgroup := func() *group {
-		len := len(groups)
-		if len < 1 {
-			return nil
-		}
-		return groups[len-1]
-	}
-
-	newgroup := func() *group {
-		if last := lastgroup(); last != nil && len(last.lineitems) == 0 {
-			return last
-		}
-
-		gr := &group{}
-		groups = append(groups, gr)
-		return gr
-	}
-
-	for _, item := range nodes {
-		lineno := item.Pos().Line
-		if line == nil || lineno != prevline {
-			gr := lastgroup()
-			if gr == nil {
-				gr = newgroup()
-			}
-
-			if line != nil {
-				gr.lineitems = append(gr.lineitems, line)
-			}
-
-			if lineno-prevline > 1 {
-				gr = newgroup()
-			}
-
-			line = &lineitem{}
-		}
-
-		line.items = append(line.items, item)
-
-		switch node := item.(type) {
-		case *ast.Comment:
-			line.comment = true
-		case *ast.Verb:
-			if node.Body != nil {
-				line.braces = true
-			}
-
-			if node.Values != nil {
-				line.values = len(node.Values.Items)
-			}
-		}
-
-		prevline = lineno
-	}
-
-	if gr := lastgroup(); line != nil && gr != nil {
-		gr.lineitems = append(gr.lineitems, line)
-	}
-
-	for _, group := range groups {
-		fmt.Println(group)
-
-	}
-
-	return
-}
-
 func (p *Printer) verbBody(body *ast.VerbBody) (n int) {
 	if body.IsEmpty() {
 		return
 	}
 
-	groups := parseColumns(body.Items, 1)
-	fmt.Println(groups)
+	var prevline int
 
+	for _, item := range body.Items {
+		line := item.Pos().Line
+
+		if prevline > 0 {
+			if line != prevline {
+				n += p.newline()
+			}
+
+			if line-prevline > 1 {
+				n += p.newline()
+			}
+		}
+
+		switch node := item.(type) {
+		case *ast.Comment:
+			if line == prevline {
+				n += p.space()
+			} else {
+				n += p.tabs()
+			}
+
+			n += p.comment(node)
+		case *ast.Verb:
+			n += p.tabs() + p.verb(node)
+		}
+
+		prevline = line
+	}
+
+	n += p.newline()
 	return
-
-	// buffer := p.writer
-	// var prevline int
-	// var tabs *tabwriter.Writer
-
-	// flush := func() {
-	// 	if tabs != nil {
-	// 		tabs.Flush()
-	// 		p.writer = buffer
-	// 		tabs = nil
-	// 	}
-	// }
-
-	// for _, item := range body.Items {
-	// 	line := item.Pos().Line
-
-	// 	if prevline > 0 {
-	// 		if line != prevline {
-	// 			n += p.newline()
-	// 		}
-
-	// 		if line-prevline > 1 {
-	// 			flush()
-	// 			n += p.newline()
-	// 		}
-	// 	}
-
-	// 	switch node := item.(type) {
-	// 	case *ast.Comment:
-	// 		if prevline != line {
-	// 			flush()
-	// 			if line-prevline == 1 {
-	// 				n += p.newline()
-	// 			}
-	// 		}
-
-	// 		n += p.comment(node)
-
-	// 		if prevline == line {
-	// 			n += p.write("\t")
-	// 		}
-	// 	case *ast.Verb:
-	// 		if tabs == nil {
-	// 			tabs = tabwriter.NewWriter(buffer, 0, 2, 1, ' ', 0)
-	// 			p.writer = tabs
-	// 		}
-
-	// 		n += p.verbHead(node)
-
-	// 		if node.Body != nil {
-	// 			if !node.Body.IsEmpty() {
-	// 				n += p.write("\t{\t\n")
-	// 				flush()
-	// 				p.indent()
-	// 				n += p.verbBody(node.Body)
-	// 				p.outdent()
-	// 				n += p.write("}")
-	// 			} else {
-	// 				n += p.write("\t{}\t")
-	// 			}
-	// 		} else {
-	// 			n += p.write("\t\t")
-	// 		}
-	// 	}
-
-	// 	prevline = line
-	// }
-
-	// n += p.newline()
-	// flush()
-	// return
 }
 
 func (p *Printer) comment(c *ast.Comment) int {
 	return p.write(c.Text)
 }
 
-func (p *Printer) verbHead(verb *ast.Verb) (n int) {
-	n += p.identifier(verb.Key) + p.write("\t")
+func (p *Printer) verb(verb *ast.Verb) (n int) {
+	n += p.identifier(verb.Key)
 	n += p.valueGroup(verb.Values, func(n int) string {
-		if n == 0 {
-			return ""
-		}
-
 		return " "
 	})
+
+	if verb.Body != nil {
+		if !verb.Body.IsEmpty() {
+			n += p.write(" {\n")
+			p.indent()
+			n += p.verbBody(verb.Body)
+			p.outdent()
+			n += p.tabs() + p.write("}")
+		} else {
+			n += p.write(" {}")
+		}
+	}
 
 	return
 }

@@ -1,5 +1,3 @@
-
-
 # all users match the everyone permission
 permission everyone {}
 
@@ -12,7 +10,7 @@ permission admin {
 model user {
   # config
   single true # makes the model only ever return a single document
-  
+
   # expected content in a document of this model
   schema {
     id           uuid      computed(uuidv4) primaryKey immutable

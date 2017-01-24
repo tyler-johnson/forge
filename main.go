@@ -25,8 +25,8 @@ foo bar
 `
 
 func main() {
-	// tree, err := fcl.ParseFile("./forge/fcl/example/user.fg")
-	tree, err := fcl.Parse([]byte(test))
+	tree, err := fcl.ParseFile("./forge/fcl/example/user.fg")
+	// tree, err := fcl.Parse([]byte(test))
 	if err != nil {
 		panic(err)
 	}
