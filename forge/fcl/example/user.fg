@@ -13,12 +13,12 @@ model user {
 
   # expected content in a document of this model
   schema {
-    id           uuid      computed(uuidv4) primaryKey immutable
-    created      date      computed(currentDate) immutable
-    lastUpdated  date      computed(currentDate)
-    username     string    unique merge requireOnCreate
-    email        string    validate(email) merge requireOnCreate
-    password     password  computed(pbkdf2) minlen(8) hidden requireOnCreate
+    id           uuid      computed(uuid_v4) primary_key immutable
+    created      date      computed(current_date) immutable
+    lastUpdated  date      computed(current_date)
+    username     string    unique merge required
+    email        string    validate(email) merge required
+    password     password  computed(pbkdf2) minlen(8) hidden required
     admin        bool      default(false) merge
   }
 
@@ -63,8 +63,8 @@ model user {
 # config for basic authentication
 authentication basic {
   model user
-  where username $basicAuth.username
+  where username $basic_auth.username
   assert {
-    equal $doc.password passwordHash($basicAuth.password $doc.password)
+    equal $doc.password password_hash($basic_auth.password $doc.password)
   }
 }
