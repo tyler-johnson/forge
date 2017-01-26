@@ -132,3 +132,7 @@ func (f *MethodCall) NodeName() string {
 func (a *MethodCall) Pos() token.Pos {
 	return a.Key.Pos()
 }
+
+func (a *MethodCall) HasArguments() bool {
+	return a.Arguments != nil
+}

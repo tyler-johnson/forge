@@ -46,3 +46,7 @@ func (f *Verb) NodeName() string {
 func (v *Verb) Pos() token.Pos {
 	return v.Key.RawPos
 }
+
+func (v *Verb) HasBody() bool {
+	return v.Body != nil
+}

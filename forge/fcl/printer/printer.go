@@ -145,7 +145,7 @@ func (p *Printer) verb(verb *ast.Verb) (n int) {
 		return " "
 	})
 
-	if verb.Body != nil {
+	if verb.HasBody() {
 		if !verb.Body.IsEmpty() {
 			n += p.write(" {\n")
 			p.indent()
@@ -191,7 +191,7 @@ func (p *Printer) literal(lit *ast.Literal) (n int) {
 
 func (p *Printer) methodCall(met *ast.MethodCall) (n int) {
 	n += p.identifier(met.Key) + p.path(met.Path)
-	if met.Arguments != nil {
+	if met.HasArguments() {
 		n += p.write("(")
 		n += p.valueGroup(met.Arguments, func(n int) string {
 			if n > 0 {

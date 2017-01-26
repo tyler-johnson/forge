@@ -1,10 +1,8 @@
 package main
 
 import (
-	"os"
-
 	"github.com/tyler-johnson/forge/forge/fcl"
-	"github.com/tyler-johnson/forge/forge/fcl/printer"
+	"github.com/tyler-johnson/forge/forge/node/interpreter"
 )
 
 const test = `
@@ -31,21 +29,27 @@ func main() {
 		panic(err)
 	}
 
-	result, err := printer.Print(tree)
+	i := interpreter.New()
+	err = i.Interpret(tree)
 	if err != nil {
 		panic(err)
 	}
 
-	outfile, err := os.Create("./user_result.fg")
-	if err != nil {
-		panic(err)
-	}
-	defer outfile.Close()
+	// result, err := printer.Print(tree)
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	_, err = outfile.Write(result)
-	if err != nil {
-		panic(err)
-	}
+	// outfile, err := os.Create("./user_result.fg")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer outfile.Close()
+
+	// _, err = outfile.Write(result)
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	// o, _ := json.MarshalIndent(file, "", "  ")
 	// fmt.Println(string(o[:]))
