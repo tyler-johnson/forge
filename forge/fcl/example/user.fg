@@ -2,8 +2,8 @@
 permission everyone {}
 
 # only admins get admin permissions
-permission admin {
-  assert ok $userctx.admin
+permission sysadmin {
+  assert includes $userctx.roles "_admin"
 }
 
 # the user model: the definition of a user
@@ -13,58 +13,66 @@ model user {
 
   # expected content in a document of this model
   schema {
-    id           uuid      computed(uuid_v4) primary_key immutable
-    created      date      computed(current_date) immutable
-    lastUpdated  date      computed(current_date)
-    username     string    unique merge required
-    email        string    validate(email) merge required
-    password     password  computed(pbkdf2) minlen(8) hidden required
-    admin        bool      default(false) merge
+    id           uuid          computed(uuid_v4) primary_key immutable
+    created      date          computed(current_date) immutable
+    lastUpdated  date          computed(current_date)
+    username     string        unique merge required
+    email        string        validate(email) merge required
+    roles        array(string) merge
+
+    password {
+      type password(pbkdf2)
+      validate minlen(8)
+      trait hidden required
+    }
   }
 
   # allow reads to user's own document
-  publish ownUser {
+  publish "own user" {
     permission everyone
     where id $userctx.id
   }
 
   # admins get access to everyone
-  publish allUsers {
-    permission admin
+  publish "all users" {
+    permission sysadmin
   }
 
   # admins can do anything they want
-  allow {
-    policy all
-    permission admin
+  policy { 
+    permission sysadmin
+    allow {}
   }
 
   # everyone can create users
-  allow {
-    policy create
+  policy {
+    method create
     permission everyone
+    allow {}
   }
 
   # everyone can update/delete their own doc
-  allow {
-    policy update delete
+  policy {
+    method update delete
     permission everyone
-    where id $userctx.id
+    allow {
+      where id $userctx.id
+    }
   }
 
-  # prevent users from changing admin field
-  deny {
-    policy create update
-    permission !admin
-    where admin true
+  # prevent normal users from changing roles field
+  policy {
+    method create update
+    permission !sysadmin
+    deny {
+      where roles @ne "null"
+    }
   }
 }
 
 # config for basic authentication
-authentication basic {
+authorization password {
   model user
-  where username $basic_auth.username
-  assert {
-    equal $doc.password password_hash($basic_auth.password $doc.password)
-  }
+  username_field "username"
+  password_field "password"
 }

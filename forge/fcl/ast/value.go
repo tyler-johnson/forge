@@ -59,6 +59,10 @@ func (a *Identifier) SetModifier(mods ...string) {
 	}
 }
 
+func (a *Identifier) HasModifiers() bool {
+	return len(a.Modifiers) != 0
+}
+
 func (f *Identifier) NodeName() string {
 	return "Identifier"
 }

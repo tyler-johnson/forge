@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/tyler-johnson/forge/forge/fcl"
-	"github.com/tyler-johnson/forge/forge/node/interpreter"
+	"github.com/tyler-johnson/forge/forge/node"
 )
 
 const test = `
@@ -29,11 +31,13 @@ func main() {
 		panic(err)
 	}
 
-	i := interpreter.New()
-	err = i.Interpret(tree)
+	node := node.New()
+	err = node.Interpret(tree)
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Println(node)
 
 	// result, err := printer.Print(tree)
 	// if err != nil {

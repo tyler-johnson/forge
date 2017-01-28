@@ -2,6 +2,8 @@ package printer
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"runtime"
 	"strings"
@@ -10,23 +12,21 @@ import (
 )
 
 type Printer struct {
-	file   *ast.File
 	writer io.Writer
-	buffer *bytes.Buffer
 	line   int
 	tablen int
 }
 
-func Print(file *ast.File) ([]byte, error) {
-	p := New(file)
-	return p.Print()
+func Print(node ast.Node) ([]byte, error) {
+	p := New()
+	return p.Print(node)
 }
 
-func New(file *ast.File) *Printer {
-	return &Printer{file: file}
+func New() *Printer {
+	return &Printer{}
 }
 
-func (p *Printer) Print() (b []byte, err error) {
+func (p *Printer) Print(node ast.Node) (b []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(runtime.Error); ok {
@@ -40,16 +40,40 @@ func (p *Printer) Print() (b []byte, err error) {
 	}()
 
 	p.reset()
-	p.buffer = bytes.NewBuffer(nil)
+	buf := bytes.NewBuffer(nil)
 	defer func() {
-		p.buffer.Reset()
-		p.buffer = nil
+		buf.Reset()
+		buf = nil
 	}()
-	p.writer = p.buffer
+	p.writer = buf
 
-	p.verbBody(p.file.Root)
-	b = make([]byte, p.buffer.Len())
-	copy(b, p.buffer.Bytes())
+	switch i := node.(type) {
+	case *ast.File:
+		p.verbBody(i.Root)
+	case *ast.VerbBody:
+		p.verbBody(i)
+	case *ast.Verb:
+		p.verb(i)
+	case *ast.Comment:
+		p.comment(i)
+	case *ast.Identifier:
+		p.identifier(i)
+	case *ast.ValueGroup:
+		p.valueGroup(i, nil)
+	case *ast.Literal:
+		p.literal(i)
+	case *ast.MethodCall:
+		p.methodCall(i)
+	case *ast.Variable:
+		p.variable(i)
+	case *ast.Path:
+		p.path(i)
+	default:
+		return nil, errors.New(fmt.Sprintf("Unknown node '%s'", node.NodeName()))
+	}
+
+	b = make([]byte, buf.Len())
+	copy(b, buf.Bytes())
 
 	return
 }
@@ -170,7 +194,11 @@ func (p *Printer) valueGroup(vg *ast.ValueGroup, pre func(int) string) (n int) {
 	}
 
 	for i, item := range vg.Items {
-		n += p.write(pre(i))
+		if pre != nil {
+			n += p.write(pre(i))
+		} else if i != 0 {
+			n += p.write(" ")
+		}
 
 		switch node := item.(type) {
 		case *ast.Literal:
