@@ -7,17 +7,17 @@ import (
 )
 
 type Permissions struct {
-	byname map[string]*ast.VerbBody
+	ByName map[string]*Permission
 }
 
 func New() *Permissions {
 	return &Permissions{
-		byname: make(map[string]*ast.VerbBody),
+		ByName: make(map[string]*Permission),
 	}
 }
 
-func (p *Permissions) Register(name string, body *ast.VerbBody) {
-	p.byname[name] = body
+func (p *Permissions) Register(name string) {
+	p.ByName[name] = &Permission{name}
 }
 
 func (p *Permissions) Interpret(verb *ast.Verb) (bool, error) {
@@ -36,6 +36,10 @@ func (p *Permissions) Interpret(verb *ast.Verb) (bool, error) {
 		return false, errors.New("Expecting permission name.")
 	}
 
-	p.Register(name.Key.Value, verb.Body)
+	p.Register(name.Key.Value)
 	return true, nil
+}
+
+type Permission struct {
+	Name string
 }

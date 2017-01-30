@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 
+	"encoding/json"
+
 	"github.com/tyler-johnson/forge/forge/fcl"
 	"github.com/tyler-johnson/forge/forge/node"
 )
@@ -37,7 +39,12 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println(node)
+	b, err := json.MarshalIndent(node, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(string(b[:]))
 
 	// result, err := printer.Print(tree)
 	// if err != nil {

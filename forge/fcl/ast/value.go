@@ -138,5 +138,5 @@ func (a *MethodCall) Pos() token.Pos {
 }
 
 func (a *MethodCall) HasArguments() bool {
-	return a.Arguments != nil
+	return a.Arguments != nil && !a.Arguments.IsEmpty()
 }

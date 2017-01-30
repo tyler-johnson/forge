@@ -6,6 +6,8 @@ import (
 
 	"github.com/tyler-johnson/forge/forge/fcl/ast"
 	"github.com/tyler-johnson/forge/forge/fcl/printer"
+	"github.com/tyler-johnson/forge/forge/node/interpreter"
+	"github.com/tyler-johnson/forge/forge/node/utils"
 )
 
 type Models struct {
@@ -19,7 +21,7 @@ func New() *Models {
 func (m *Models) Get(name string) *Model {
 	model, ok := m.ByName[name]
 	if !ok {
-		model = &Model{}
+		model = NewModel(name)
 		m.ByName[name] = model
 	}
 
@@ -28,34 +30,71 @@ func (m *Models) Get(name string) *Model {
 
 func (m *Models) Interpret(verb *ast.Verb) (bool, error) {
 	// only match plain model verb
-	if verb.Key.Value != "model" || len(verb.Key.Modifiers) != 0 {
+	if !utils.MatchKey(verb, "model", nil) {
 		return false, nil
 	}
 
-	model := m.Get(verb.Key.Value)
-	err := model.Interpret(verb.Body)
-	return true, err
+	name, ok := utils.ExtractName(verb)
+	if !ok {
+		return false, errors.New(fmt.Sprintf("Expecting type name as method, instead got '%s'", verb.Values.Items[0]))
+	}
+
+	return m.Get(name).Interpret(verb)
 }
 
 type Model struct {
+	Name   string
 	Schema *Schema
+	pipe   *interpreter.Pipeline
 }
 
-func NewModel() *Model {
-	return &Model{&Schema{}}
+func NewModel(name string) *Model {
+	schema := NewSchema()
+	pipe := interpreter.NewPipeline()
+	pipe.Use(schema)
+	pipe.Use(interpreter.NewSkip())
+
+	return &Model{
+		Name:   name,
+		Schema: schema,
+		pipe:   pipe,
+	}
 }
 
-func (m *Model) Interpret(vb *ast.VerbBody) error {
-	// parse children
-	return nil
+func (m *Model) Interpret(verb *ast.Verb) (bool, error) {
+	err := interpreter.InterpretBody(m.pipe, verb)
+	return true, err
 }
 
 type Schema struct {
+	ByKey map[string]*SchemaField
+}
+
+func NewSchema() *Schema {
+	return &Schema{
+		ByKey: make(map[string]*SchemaField),
+	}
 }
 
 func (s *Schema) Interpret(verb *ast.Verb) (bool, error) {
-	// look for schema declaration
-	return false, nil
+	if !utils.MatchKey(verb, "schema", nil) {
+		return false, nil
+	}
+
+	for _, node := range verb.Body.Items {
+		switch item := node.(type) {
+		case *ast.Verb:
+			if verb.Key.HasModifiers() {
+				continue
+			}
+
+			field := &SchemaField{}
+			field.Key = item.Key.Value
+			s.ByKey[field.Key] = field
+		}
+	}
+
+	return true, nil
 }
 
 type SchemaField struct {
